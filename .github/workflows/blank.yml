@@ -19,53 +19,35 @@ jobs:
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          # Tắt xác thực NLA để tránh lỗi "Credentials did not work"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
 
-      - name: Update Admin Password
-        continue-on-error: true
+      - name: Force Update Admin Password
+        # Dùng PowerShell để ép đổi pass mà không quan tâm lỗi user tồn tại hay chưa
         run: |
-          net user runneradmin Password123!
-          net localgroup administrators runneradmin /add
+          $Password = ConvertTo-SecureString "Password123!" -AsPlainText -Force
+          $User = "runneradmin"
+          # Đổi pass cho user có sẵn
+          net user $User Password123!
+          # Đảm bảo user thuộc nhóm Admin
+          net localgroup administrators $User /add
+          Write-Host "Da thiet lap mat khau moi thanh cong!"
+        continue-on-error: true
 
       - name: Start Ngrok Tunnel
         run: |
-          # Chạy Ngrok tại region Asia (ap) để giảm ping
           Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp --region ap 3389"""
-          Write-Host "Dang doi Ngrok khoi tao (30s)..."
-          Start-Sleep -Seconds 30
+          Start-Sleep -Seconds 20
 
       - name: Get RDP Address
         run: |
-          $max_retries = 10
-          $retry_count = 0
-          $public_url = ""
-
-          while ($retry_count -lt $max_retries) {
-              try {
-                  $response = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
-                  if ($response.tunnels.Count -gt 0) {
-                      $public_url = $response.tunnels[0].public_url
-                      break
-                  }
-              } catch { }
-              Write-Host "Chưa tìm thấy tunnel, đang thử lại lần $($retry_count + 1)..."
-              Start-Sleep -Seconds 5
-              $retry_count++
-          }
-
-          if ($public_url -ne "") {
-              Write-Host "===================================================="
-              Write-Host "KẾT NỐI RDP TẠI ĐỊA CHỈ:"
-              Write-Host "Address: $public_url"
-              Write-Host "Username: runneradmin"
-              Write-Host "Password: Password123!"
-              Write-Host "===================================================="
-          } else {
-              Write-Host "LOI: Khong the lay duoc dia chi Ngrok. Kiem tra Auth Token!"
-              exit 1
-          }
+          $response = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
+          $public_url = $response.tunnels[0].public_url
+          Write-Host "===================================================="
+          Write-Host "ADDRESS: $public_url"
+          Write-Host "USER: .\runneradmin"
+          Write-Host "PASS: Password123!"
+          Write-Host "===================================================="
 
       - name: Keep Alive (6 hours)
-        run: |
-          Write-Host "VPS dang chay mượt mà tại Region AP..."
-          Start-Sleep -Seconds 21600
+        run: Start-Sleep -Seconds 21600
