@@ -1,4 +1,4 @@
-name: Windows VPS Cloudflare Ultra-Stable
+name: Windows VPS Cloudflare 
 on:
   workflow_dispatch:
 
