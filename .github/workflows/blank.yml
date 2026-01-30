@@ -1,4 +1,4 @@
-name: Windows VPS 
+name: Windows VPS via Ngrok
 on:
   workflow_dispatch:
 
@@ -9,7 +9,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Ngrok via Chocolatey
+      - name: Install Ngrok
+        # Sử dụng Chocolatey để cài đặt tự động, tránh lỗi link download bị chết
         run: choco install ngrok -y
 
       - name: Authenticate Ngrok
@@ -17,29 +18,25 @@ jobs:
 
       - name: Enable Remote Desktop (RDP)
         run: |
-          # Cho phép kết nối từ xa
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          # Mở firewall cho RDP
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          # Tắt yêu cầu xác thực mức mạng (NLA) để dễ kết nối hơn nếu cần
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-      - name: Create Admin User
+      - name: Update Admin Password
         run: |
-          # Tạo user mới với tên 'runneradmin' và mật khẩu 'Password123!'
-          # Lưu ý: Windows yêu cầu mật khẩu có độ phức tạp (chữ hoa, thường, số, ký tự đặc biệt)
-          net user runneradmin Password123! /add
-          net localgroup administrators runneradmin /add
+          # Vì runneradmin đã tồn tại, chúng ta chỉ cần đổi mật khẩu thay vì tạo mới
+          # Nếu lệnh lỗi (ví dụ user khác), nó sẽ tiếp tục chạy bước sau
+          net user runneradmin Password123! /add || net user runneradmin Password123!
+          net localgroup administrators runneradmin /add || echo "User already admin"
 
       - name: Start Ngrok Tunnel
         run: |
-          # Chạy Ngrok ở chế độ nền (background) trỏ vào cổng RDP 3389
+          # Chạy Ngrok và ẩn log để không lộ thông tin trong console GitHub
           Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp 3389"""
-          Start-Sleep -Seconds 12
+          Start-Sleep -Seconds 15
 
       - name: Get RDP Address
         run: |
-          # Lấy địa chỉ IP/Domain công khai từ API nội bộ của Ngrok
           $tunnels = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
           $public_url = $tunnels.tunnels[0].public_url
           Write-Host "===================================================="
@@ -51,5 +48,5 @@ jobs:
 
       - name: Keep Alive (6 hours)
         run: |
-          Write-Host "VPS đang chạy... Đừng đóng Workflow này."
+          Write-Host "VPS đang chạy... Đừng đóng Workflow này cho đến khi bạn dùng xong."
           Start-Sleep -Seconds 21600
