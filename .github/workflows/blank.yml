@@ -1,4 +1,4 @@
-name: Windows VPS via Ngrok
+name: Windows VPS via Cloudflare Tunnel
 on:
   workflow_dispatch:
 
@@ -9,45 +9,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Ngrok
-        run: choco install ngrok -y
-
-      - name: Authenticate Ngrok
-        run: ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+      - name: Install Cloudflared
+        run: choco install cloudflared -y
 
       - name: Enable Remote Desktop (RDP)
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          # Tắt xác thực NLA để tránh lỗi "Credentials did not work"
+          # Tắt xác thực NLA để tránh lỗi đăng nhập từ xa
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
 
-      - name: Force Update Admin Password
-        # Dùng PowerShell để ép đổi pass mà không quan tâm lỗi user tồn tại hay chưa
+      - name: Set Admin Password
         run: |
-          $Password = ConvertTo-SecureString "Password123!" -AsPlainText -Force
+          $Password = "Password123!"
           $User = "runneradmin"
-          # Đổi pass cho user có sẵn
-          net user $User Password123!
-          # Đảm bảo user thuộc nhóm Admin
+          net user $User $Password
           net localgroup administrators $User /add
-          Write-Host "Da thiet lap mat khau moi thanh cong!"
         continue-on-error: true
 
-      - name: Start Ngrok Tunnel
+      - name: Run Cloudflare Tunnel
         run: |
-          Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp --region ap 3389"""
-          Start-Sleep -Seconds 20
-
-      - name: Get RDP Address
-        run: |
-          $response = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
-          $public_url = $response.tunnels[0].public_url
-          Write-Host "===================================================="
-          Write-Host "ADDRESS: $public_url"
-          Write-Host "USER: .\runneradmin"
-          Write-Host "PASS: Password123!"
-          Write-Host "===================================================="
-
-      - name: Keep Alive (6 hours)
-        run: Start-Sleep -Seconds 21600
+          Write-Host "Dang khoi tao Tunnel voi Token cua ban..."
+          # Luu y: Ban phai tao CLOUDFLARE_TUNNEL_TOKEN trong GitHub Secrets
+          cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
