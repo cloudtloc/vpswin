@@ -22,7 +22,6 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
       - name: Update Admin Password
-        # Sử dụng continue-on-error để GitHub không dừng lại khi thấy thông báo lỗi từ NET USER
         continue-on-error: true
         run: |
           net user runneradmin Password123!
@@ -30,21 +29,43 @@ jobs:
 
       - name: Start Ngrok Tunnel
         run: |
-          Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp 3389"""
-          Start-Sleep -Seconds 15
+          # Chạy Ngrok tại region Asia (ap) để giảm ping
+          Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp --region ap 3389"""
+          Write-Host "Dang doi Ngrok khoi tao (30s)..."
+          Start-Sleep -Seconds 30
 
       - name: Get RDP Address
         run: |
-          $tunnels = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
-          $public_url = $tunnels.tunnels[0].public_url
-          Write-Host "===================================================="
-          Write-Host "KẾT NỐI RDP TẠI ĐỊA CHỈ:"
-          Write-Host "Address: $public_url"
-          Write-Host "Username: runneradmin"
-          Write-Host "Password: Password123!"
-          Write-Host "===================================================="
+          $max_retries = 10
+          $retry_count = 0
+          $public_url = ""
+
+          while ($retry_count -lt $max_retries) {
+              try {
+                  $response = curl.exe -s http://127.0.0.1:4040/api/tunnels | ConvertFrom-Json
+                  if ($response.tunnels.Count -gt 0) {
+                      $public_url = $response.tunnels[0].public_url
+                      break
+                  }
+              } catch { }
+              Write-Host "Chưa tìm thấy tunnel, đang thử lại lần $($retry_count + 1)..."
+              Start-Sleep -Seconds 5
+              $retry_count++
+          }
+
+          if ($public_url -ne "") {
+              Write-Host "===================================================="
+              Write-Host "KẾT NỐI RDP TẠI ĐỊA CHỈ:"
+              Write-Host "Address: $public_url"
+              Write-Host "Username: runneradmin"
+              Write-Host "Password: Password123!"
+              Write-Host "===================================================="
+          } else {
+              Write-Host "LOI: Khong the lay duoc dia chi Ngrok. Kiem tra Auth Token!"
+              exit 1
+          }
 
       - name: Keep Alive (6 hours)
         run: |
-          Write-Host "VPS đang chạy mượt mà..."
+          Write-Host "VPS dang chay mượt mà tại Region AP..."
           Start-Sleep -Seconds 21600
