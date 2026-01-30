@@ -16,7 +16,6 @@ jobs:
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          # Tắt xác thực NLA để tránh lỗi đăng nhập từ xa
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
 
       - name: Set Admin Password
@@ -25,10 +24,18 @@ jobs:
           $User = "runneradmin"
           net user $User $Password
           net localgroup administrators $User /add
+          
+          # Hiển thị thông tin đăng nhập ra Log
+          Write-Host "===================================================="
+          Write-Host "THONG TIN DANG NHAP VPS (CLOUDFLARE)"
+          Write-Host "Username: .\$User"
+          Write-Host "Password: $Password"
+          Write-Host "Hostname: (Xem trong Cloudflare Zero Trust Dashboard)"
+          Write-Host "===================================================="
         continue-on-error: true
 
       - name: Run Cloudflare Tunnel
         run: |
-          Write-Host "Dang khoi tao Tunnel voi Token cua ban..."
-          # Luu y: Ban phai tao CLOUDFLARE_TUNNEL_TOKEN trong GitHub Secrets
+          Write-Host "Dang ket noi Tunnel... VPS se online trong giay lat."
+          # Lenh nay se treo de giu VPS song 6 tieng
           cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
