@@ -1,4 +1,4 @@
-name: Windows VPS Cloudflare 
+name: Windows VPS Cloudflare Ultra-Stable
 on:
   workflow_dispatch:
 
@@ -12,19 +12,20 @@ jobs:
       - name: Install Cloudflared
         run: choco install cloudflared -y
 
-      - name: Configure RDP & System
+      - name: Configure RDP & System Optimization
         run: |
-          # Cho phép Remote Desktop
+          # 1. Cho phép Remote Desktop
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
           
-          # Tắt Firewall hoàn toàn để không chặn Cloudflare Tunnel
+          # 2. Tắt Firewall hoàn toàn
           Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
           
-          # Tối ưu hóa hiệu suất (Tắt các hiệu ứng không cần thiết để browser render nhanh hơn)
-          VisualEffectsConfigurations -Everywhere -Disabled
+          # 3. Tối ưu hiệu suất (Thay thế lệnh bị lỗi)
+          # Thiết lập Windows ưu tiên hiệu suất (Adjust for best performance)
+          reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
           
-          # Đảm bảo dịch vụ RDP luôn chạy
+          # 4. Đảm bảo dịch vụ RDP luôn chạy
           Set-Service TermService -StartupType Automatic
           Start-Service TermService -ErrorAction SilentlyContinue
 
@@ -37,13 +38,10 @@ jobs:
       - name: Run Tunnel & Keep Alive
         run: |
           Write-Host "--- KHOI DONG CLOUDFLARE TUNNEL ---"
-          # Chạy tunnel với token từ Secret
           $process = Start-Process cloudflared -ArgumentList "tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" -PassThru
           
           Write-Host "--- VPS DA ONLINE TRÊN https://vps.tloc.cloud/ ---"
-          Write-Host "Luu y: Ban phai cau hinh 'Public Hostname' va 'Browser Rendering' tren Cloudflare Dashboard."
           
-          # Duy trì kết nối tối đa 6 tiếng (Giới hạn của GitHub Actions thường là 6h)
           $timeout = New-TimeSpan -Hours 6
           $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
           
@@ -52,8 +50,6 @@ jobs:
                   Write-Host "CANH BAO: Tunnel bi sap! Dang khoi dong lai..."
                   $process = Start-Process cloudflared -ArgumentList "tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" -PassThru
               }
-              
-              # In log để tránh GitHub ngắt session do "No output"
               $timeRemaining = $timeout - $stopwatch.Elapsed
               Write-Host "Uptime: $($stopwatch.Elapsed.ToString('hh\:mm\:ss')) | Con lai: $($timeRemaining.ToString('hh\:mm\:ss')) | Status: Connected"
               Start-Sleep -Seconds 30
