@@ -14,12 +14,14 @@ jobs:
 
       - name: Setup Windows RDP & User
         run: |
-          # 1. Cho phép RDP
+          # 1. Cho phép RDP & Tắt NLA (Quan trọng cho Browser RDP)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          
+          # 2. Tắt Tường lửa triệt để
           Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
           
-          # 2. Tạo Password & Kiểm tra User (Tránh lỗi 1378)
+          # 3. Tạo Password & User
           $Password = ConvertTo-SecureString "Password123!" -AsPlainText -Force
           $User = "runneradmin"
           net user $User Password123!
@@ -27,23 +29,42 @@ jobs:
               Add-LocalGroupMember -Group "Administrators" -Member $User
           }
           
-          # 3. Khởi động dịch vụ RDP
+          # 4. Khởi động dịch vụ RDP và CHỜ cho đến khi port 3389 thực sự mở
           Start-Service TermService
+          Write-Host "Dang doi port 3389 mo..."
+          $timeout = New-TimeSpan -Seconds 60
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          do {
+              $socket = New-Object System.Net.Sockets.TcpClient
+              try {
+                  $socket.Connect("127.0.0.1", 3389)
+                  if ($socket.Connected) {
+                      Write-Host "Port 3389 da san sang!"
+                      $socket.Close()
+                      break
+                  }
+              } catch {
+                  Start-Sleep -Seconds 2
+              }
+          } while ($stopwatch.Elapsed -lt $timeout)
 
-      - name: Run Tunnel & Keep Alive
+      - name: Run Tunnel (HTTP2 Mode)
         run: |
-          Write-Host "--- DANG KET NOI TUNNEL ---"
-          # Chạy tunnel
-          $process = Start-Process cloudflared -ArgumentList "tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" -PassThru
+          Write-Host "--- DANG KET NOI TUNNEL (HTTP2) ---"
+          # QUAN TRỌNG: Thêm --protocol http2 để tránh lỗi kết nối trên Windows Runner
+          $args = "tunnel --no-autoupdate run --protocol http2 --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}"
+          $process = Start-Process cloudflared -ArgumentList $args -PassThru
           
+          # Giữ tunnel sống
           $timeout = New-TimeSpan -Hours 6
           $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
           
           while ($stopwatch.Elapsed -lt $timeout) {
               if ($process.HasExited) {
-                  Write-Host "Tunnel bi ngat, dang khoi dong lai..."
-                  $process = Start-Process cloudflared -ArgumentList "tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" -PassThru
+                  Write-Host "Tunnel bi ngat, khoi dong lai..."
+                  $process = Start-Process cloudflared -ArgumentList $args -PassThru
               }
-              Write-Host "Trang thai: Dang hoat dong | Uptime: $($stopwatch.Elapsed.ToString('hh\:mm\:ss'))"
+              Write-Host "Trang thai: OK | Uptime: $($stopwatch.Elapsed.ToString('hh\:mm\:ss'))"
               Start-Sleep -Seconds 30
           }
+          
