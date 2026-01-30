@@ -9,13 +9,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Ngrok
-        run: |
-          Invoke-WebRequest https://bin.equinox.io/c/b342391/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
-          Expand-Archive ngrok.zip
-
+    - name: Install Ngrok
+        run: choco install ngrok
+        
+      # Lưu ý: Khi cài qua choco, lệnh gọi ngrok sẽ không cần .\ nữa
       - name: Authenticate Ngrok
-        run: .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        run: ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Start Ngrok Tunnel
+        run: |
+          Start-Process Powershell -ArgumentList "-NoExit -Command ""ngrok tcp 3389"""
+          Start-Sleep -Seconds 10
 
       - name: Enable RDP
         run: |
