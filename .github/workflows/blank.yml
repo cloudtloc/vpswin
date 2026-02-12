@@ -1,4 +1,4 @@
-name: Windows RDP 
+name: Windows
 on:
   workflow_dispatch:
 
@@ -7,6 +7,7 @@ jobs:
     runs-on: windows-latest
     env:
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      # Mật khẩu RDP phải đủ mạnh theo chính sách Windows
       RDP_PASSWORD: Win2026A!
     steps:
       - name: Checkout code
@@ -20,45 +21,22 @@ jobs:
             exit 1
           }
 
-      - name: Optimize Windows Performance & Visuals
-        shell: pwsh
-        run: |
-          # 1. Tắt hiệu ứng đồ họa (Best Performance)
-          $visualPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects'
-          if (-not (Test-Path $visualPath)) { New-Item -Path $visualPath -Force | Out-Null }
-          Set-ItemProperty -Path $visualPath -Name VisualFXSetting -Value 2 -Force
-
-          # 2. Tắt Wallpaper và Animation
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value "" -Force
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name MinAnimate -Value 0 -Force
-          
-          # 3. Tắt Font Smoothing (ClearType) để giảm tải render
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 0 -Force
-
-          # 4. Tắt dịch vụ Audio (Remote Audio tốn băng thông)
-          Stop-Service -Name Audiosrv -Force -ErrorAction SilentlyContinue
-          Set-Service -Name Audiosrv -StartupType Disabled
-
-          Write-Host "Windows Visuals optimized for Low Bandwidth."
-
       - name: Enable RDP
         shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0 -Force
           Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue
-          
-          # Cấu hình RDP tối ưu băng thông
+          New-NetFirewallRule -DisplayName 'RDP 3389' -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
           $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
           if (Test-Path $rdpPath) {
-            Set-ItemProperty -Path $rdpPath -Name UserAuthentication -Value 1 -Force
-            # Giới hạn color depth server side
-            Set-ItemProperty -Path $rdpPath -Name ColorDepth -Value 3 -Force # 16-bit
+            Set-ItemProperty -Path $rdpPath -Name ColorDepth -Value 2 -Force
+            Set-ItemProperty -Path $rdpPath -Name fInheritMaxSessionTime -Value 0 -Force
+            Set-ItemProperty -Path $rdpPath -Name MaxIdleTime -Value 0 -Force
           }
-          
           $rdpUser = $env:USERNAME
           echo "RDP_USER=$rdpUser" >> $env:GITHUB_ENV
           net user $rdpUser $env:RDP_PASSWORD
-          Write-Host "RDP enabled for User: $rdpUser"
+          Write-Host "RDP enabled. User: $rdpUser"
 
       - name: Install ngrok
         shell: pwsh
@@ -68,23 +46,19 @@ jobs:
           Expand-Archive -Path $ngrokZip -DestinationPath $env:RUNNER_TEMP -Force
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
 
-      - name: Start ngrok (Region AP)
+      - name: Start ngrok, get URL and keep alive
         shell: pwsh
         run: |
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
           ngrok config add-authtoken $env:NGROK_AUTHTOKEN 2>&1 | Out-Null
-          
           $ngrokExe = Join-Path $env:RUNNER_TEMP "ngrok.exe"
           $ngrokOut = Join-Path $env:RUNNER_TEMP "ngrok_out.log"
           $ngrokErr = Join-Path $env:RUNNER_TEMP "ngrok_err.log"
-          
-          # QUAN TRỌNG: Thêm --region ap (Asia Pacific) để giảm ping về VN
-          Start-Process -FilePath $ngrokExe -ArgumentList "tcp","--region","ap","3389","--log=stdout" -NoNewWindow -PassThru -RedirectStandardOutput $ngrokOut -RedirectStandardError $ngrokErr
-          
-          $maxAttempts = 20
+          Start-Process -FilePath $ngrokExe -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru -RedirectStandardOutput $ngrokOut -RedirectStandardError $ngrokErr
+          $maxAttempts = 15
           $addr = $null
           for ($i = 0; $i -lt $maxAttempts; $i++) {
-            Start-Sleep -Seconds 3
+            Start-Sleep -Seconds 2
             try {
               $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -Method Get -ErrorAction Stop
               if ($tunnels.tunnels -and $tunnels.tunnels.Count -gt 0) {
@@ -93,36 +67,18 @@ jobs:
               }
             } catch {}
           }
-
-          if (-not $addr) { 
-              Get-Content $ngrokErr
-              Write-Error "Ngrok API failed."
-              exit 1 
-          }
-          
+          if (-not $addr) { Write-Error "Ngrok API khong phan hoi sau $maxAttempts lan thu."; exit 1 }
           echo "ADDRESS=$addr" >> $env:GITHUB_ENV
-          
-          # Output thông tin
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## 🚀 RDP Optimized (Asia Region)'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Address:** $addr")
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **User:** $env:RDP_USER")
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Pass:** $env:RDP_PASSWORD")
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## Thong tin ket noi RDP Windows'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Dia chi:** $addr")
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Username:** $env:RDP_USER")
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Password:** $env:RDP_PASSWORD")
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '**Lưu ý Client:**'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '1. Vào mstsc -> Show Options -> Display: Chọn "High Color (16 bit)".'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '2. Tab Experience: Chọn "Modem (56 kbps)". Bỏ tick TẤT CẢ.'
-          
-          Write-Host "::notice::RDP Address: $addr"
-
-      - name: Keep Alive
-        shell: pwsh
-        run: |
-          Write-Host "Press Ctrl+C to stop."
-          $i = 0
-          while ($true) {
-            $i++
-            # In ra mỗi 60s để tránh bị GitHub timeout log
-            if ($i % 60 -eq 0) { Write-Host "Session active for $i seconds..." }
-            Start-Sleep -Seconds 1
-            if ($i -ge 21600) { break } # 6 hours limit
-          }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Dung Remote Desktop (mstsc) nhap dia chi va dang nhap bang tai khoan tren.'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '**Giam giat:** Trong mstsc chon Show Options -> Experience: chon "Low bandwidth (56 kbps)" hoac bo tick "Desktop composition" va "Animate windows"; mau 16-bit.'
+          Write-Host "===== Thong tin dang nhap RDP ====="
+          Write-Host "Dia chi: $addr"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Password: $env:RDP_PASSWORD"
+          Start-Sleep -Seconds 21600
