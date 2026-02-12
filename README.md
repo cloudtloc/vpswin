@@ -27,14 +27,14 @@ Dự án này cung cấp quy trình tự động (Workflow) để tạo một m�
 5.  Nhấn **Add secret**.
 
 ### Bước 2: Tạo Workflow
-Tạo file `.github/workflows/rdp.yml` và dán nội dung code workflow (đã tối ưu) vào.
+Tạo file `.github/workflows/rdp.yml` và dán nội dung code workflow vào.
 
 ---
 
 ## 🎮 Hướng dẫn chạy
 
 1.  Vào tab **Actions** trên thanh menu của Repository.
-2.  Ở cột bên trái, chọn workflow **Windows RDP (Optimized)**.
+2.  Ở cột bên trái, chọn workflow **Windows RDP **.
 3.  Nhấn nút **Run workflow** ➔ **Run workflow**.
 4.  Chờ khoảng **1-2 phút** để quá trình khởi tạo hoàn tất.
 5.  Click vào job đang chạy, xem phần **Summary** hoặc log của bước "Start ngrok" để lấy thông tin kết nối.
@@ -48,8 +48,8 @@ Tạo file `.github/workflows/rdp.yml` và dán nội dung code workflow (đã t
 * **Username:** `runneradmin`
 * **Password:** `Win2026A!` *(Hoặc mật khẩu bạn đã sửa trong code)*
 
-### 2. Cấu hình Client để Giảm Lag (Rất quan trọng)
-Do máy chủ đặt xa, bạn **bắt buộc** phải cấu hình `Remote Desktop Connection (mstsc)` như sau trước khi bấm Connect để tránh bị delay chuột:
+### 2. Cấu hình Client để Giảm Lag 
+Do máy chủ đặt xa, bạn có thể cấu hình `Remote Desktop Connection (mstsc)` như sau trước khi bấm Connect để tránh bị delay chuột:
 
 1.  Mở **Remote Desktop Connection**, nhấn **Show Options**.
 2.  Tab **Display**:
@@ -71,4 +71,3 @@ Do máy chủ đặt xa, bạn **bắt buộc** phải cấu hình `Remote Deskt
 
 ---
 
-Made with ❤️ by [Your Name]
