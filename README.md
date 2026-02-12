@@ -1,4 +1,4 @@
-# 🚀 Windows RDP (Optimized) via GitHub Actions
+# 🚀 Windows RDP via GitHub Actions
 
 Dự án này cung cấp quy trình tự động (Workflow) để tạo một máy ảo **Windows Server 2022** miễn phí trên hạ tầng GitHub Actions, cho phép kết nối từ xa qua **Remote Desktop Protocol (RDP)** sử dụng đường hầm **Ngrok**.
 
