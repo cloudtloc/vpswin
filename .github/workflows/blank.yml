@@ -40,40 +40,39 @@ jobs:
           Expand-Archive -Path $ngrokZip -DestinationPath $env:RUNNER_TEMP -Force
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
 
-      - name: Start ngrok
+      - name: Start ngrok, get URL and keep alive
         shell: pwsh
         run: |
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
           ngrok config add-authtoken $env:NGROK_AUTHTOKEN
-          Start-Process -FilePath ngrok -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru | Out-Null
-          Start-Sleep -Seconds 6
-
-      - name: Get Connection Info
-        shell: pwsh
-        id: conn
-        run: |
-          $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -Method Get
-          $publicUrl = $tunnels.tunnels[0].public_url
-          $addr = $publicUrl -replace '^tcp://',''
+          $job = Start-Job -ScriptBlock {
+            Set-Location $using:RUNNER_TEMP
+            $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
+            ngrok tcp 3389 --log=stdout
+          }
+          $maxAttempts = 15
+          $addr = $null
+          for ($i = 0; $i -lt $maxAttempts; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -Method Get -ErrorAction Stop
+              if ($tunnels.tunnels -and $tunnels.tunnels.Count -gt 0) {
+                $addr = $tunnels.tunnels[0].public_url -replace '^tcp://',''
+                break
+              }
+            } catch {}
+          }
+          if (-not $addr) { Write-Error "Ngrok API khong phan hoi sau $maxAttempts lan thu."; exit 1 }
           echo "ADDRESS=$addr" >> $env:GITHUB_ENV
           Write-Host "Ket noi toi: $addr"
-
-      - name: Summary
-        shell: pwsh
-        run: |
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## Thong tin ket noi RDP Windows'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Dia chi:** ' + $env:ADDRESS)
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Username:** ' + $env:RDP_USER)
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Password:** ' + $env:RDP_PASSWORD)
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Dia chi:** $addr")
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Username:** $env:RDP_USER")
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- **Password:** $env:RDP_PASSWORD")
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Dung Remote Desktop (mstsc) nhap dia chi va dang nhap bang tai khoan tren.'
-          if ($env:ADDRESS) {
-            Write-Host "===== Thong tin dang nhap RDP ====="
-            Write-Host "Dia chi: $env:ADDRESS"
-            Write-Host "Username: $env:RDP_USER"
-            Write-Host "Password: $env:RDP_PASSWORD"
-          }
-
-      - name: Keep Alive
-        shell: pwsh
-        run: Start-Sleep -Seconds 21600
+          Write-Host "===== Thong tin dang nhap RDP ====="
+          Write-Host "Dia chi: $addr"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Password: $env:RDP_PASSWORD"
+          Start-Sleep -Seconds 21600
