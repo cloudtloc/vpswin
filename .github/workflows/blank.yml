@@ -27,8 +27,10 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0 -Force
           Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue
           New-NetFirewallRule -DisplayName 'RDP 3389' -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
-          net user Administrator $env:RDP_PASSWORD
-          Write-Host "RDP enabled."
+          $rdpUser = $env:USERNAME
+          echo "RDP_USER=$rdpUser" >> $env:GITHUB_ENV
+          net user $rdpUser $env:RDP_PASSWORD
+          Write-Host "RDP enabled. User: $rdpUser"
 
       - name: Install ngrok
         shell: pwsh
@@ -61,14 +63,14 @@ jobs:
         run: |
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## Thong tin ket noi RDP Windows'
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Dia chi:** ' + $env:ADDRESS)
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- **Username:** Administrator'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Username:** ' + $env:RDP_USER)
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Password:** ' + $env:RDP_PASSWORD)
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Dung Remote Desktop (mstsc) nhap dia chi va dang nhap bang tai khoan tren.'
           if ($env:ADDRESS) {
             Write-Host "===== Thong tin dang nhap RDP ====="
             Write-Host "Dia chi: $env:ADDRESS"
-            Write-Host "Username: Administrator"
+            Write-Host "Username: $env:RDP_USER"
             Write-Host "Password: $env:RDP_PASSWORD"
           }
 
