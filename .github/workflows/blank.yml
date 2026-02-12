@@ -45,11 +45,8 @@ jobs:
         run: |
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
           ngrok config add-authtoken $env:NGROK_AUTHTOKEN
-          $job = Start-Job -ScriptBlock {
-            Set-Location $using:RUNNER_TEMP
-            $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
-            ngrok tcp 3389 --log=stdout
-          }
+          $ngrokExe = Join-Path $env:RUNNER_TEMP "ngrok.exe"
+          Start-Process -FilePath $ngrokExe -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru
           $maxAttempts = 15
           $addr = $null
           for ($i = 0; $i -lt $maxAttempts; $i++) {
