@@ -52,8 +52,9 @@ jobs:
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
           ngrok config add-authtoken $env:NGROK_AUTHTOKEN 2>&1 | Out-Null
           $ngrokExe = Join-Path $env:RUNNER_TEMP "ngrok.exe"
-          $ngrokLog = Join-Path $env:RUNNER_TEMP "ngrok.log"
-          Start-Process -FilePath $ngrokExe -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru -RedirectStandardOutput $ngrokLog -RedirectStandardError $ngrokLog
+          $ngrokOut = Join-Path $env:RUNNER_TEMP "ngrok_out.log"
+          $ngrokErr = Join-Path $env:RUNNER_TEMP "ngrok_err.log"
+          Start-Process -FilePath $ngrokExe -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru -RedirectStandardOutput $ngrokOut -RedirectStandardError $ngrokErr
           $maxAttempts = 15
           $addr = $null
           for ($i = 0; $i -lt $maxAttempts; $i++) {
