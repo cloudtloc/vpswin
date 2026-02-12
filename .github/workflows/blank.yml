@@ -21,22 +21,57 @@ jobs:
             exit 1
           }
 
-      - name: Enable RDP with ngrok
-        uses: NyaMisty/reverse-rdp-windows-github-actions-ng@master
-        with:
-          ngrok-token: ${{ env.NGROK_AUTHTOKEN }}
-          password: ${{ env.RDP_PASSWORD }}
+      - name: Enable RDP
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0 -Force
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue
+          New-NetFirewallRule -DisplayName 'RDP 3389' -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+          net user Administrator $env:RDP_PASSWORD
+          Write-Host "RDP enabled."
+
+      - name: Install ngrok
+        shell: pwsh
+        run: |
+          $ngrokZip = "$env:RUNNER_TEMP\ngrok.zip"
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $ngrokZip -UseBasicParsing
+          Expand-Archive -Path $ngrokZip -DestinationPath $env:RUNNER_TEMP -Force
+          $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
+
+      - name: Start ngrok
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
+          ngrok config add-authtoken $env:NGROK_AUTHTOKEN
+          Start-Process -FilePath ngrok -ArgumentList "tcp","3389","--log=stdout" -NoNewWindow -PassThru | Out-Null
+          Start-Sleep -Seconds 6
+
+      - name: Get Connection Info
+        shell: pwsh
+        id: conn
+        run: |
+          $tunnels = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -Method Get
+          $publicUrl = $tunnels.tunnels[0].public_url
+          $addr = $publicUrl -replace '^tcp://',''
+          echo "ADDRESS=$addr" >> $env:GITHUB_ENV
+          Write-Host "Ket noi toi: $addr"
 
       - name: Summary
         shell: pwsh
         run: |
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## Thông tin kết nối RDP Windows'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- Username: `runneradmin`'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- Password: `' + $env:RDP_PASSWORD + '`')
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '## Thong tin ket noi RDP Windows'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Dia chi:** ' + $env:ADDRESS)
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- **Username:** Administrator'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ('- **Password:** ' + $env:RDP_PASSWORD)
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '### Cách lấy địa chỉ kết nối RDP'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- Đăng nhập `https://dashboard.ngrok.com/` bằng tài khoản ngrok.'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- Vào Cloud Edge -> Endpoints, lấy host:port của tunnel RDP.'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '- Dùng Remote Desktop (mstsc) hoặc client RDP khác để kết nối.'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '> Khi debug xong, xóa file `Delete-This-File-To-Continue.txt` trên Desktop của runner để workflow chạy tiếp.'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Dung Remote Desktop (mstsc) nhap dia chi va dang nhap bang tai khoan tren.'
+          if ($env:ADDRESS) {
+            Write-Host "===== Thong tin dang nhap RDP ====="
+            Write-Host "Dia chi: $env:ADDRESS"
+            Write-Host "Username: Administrator"
+            Write-Host "Password: $env:RDP_PASSWORD"
+          }
+
+      - name: Keep Alive
+        shell: pwsh
+        run: Start-Sleep -Seconds 21600
